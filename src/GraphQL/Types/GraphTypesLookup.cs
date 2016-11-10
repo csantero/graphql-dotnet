@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using GraphQL.Introspection;
@@ -7,7 +8,7 @@ namespace GraphQL.Types
 {
     public class GraphTypesLookup
     {
-        private readonly Dictionary<string, IGraphType> _types = new Dictionary<string, IGraphType>();
+        private readonly ConcurrentDictionary<string, IGraphType> _types = new ConcurrentDictionary<string, IGraphType>();
 
         public GraphTypesLookup()
         {
@@ -55,7 +56,7 @@ namespace GraphQL.Types
 
         public IEnumerable<IGraphType> All()
         {
-            return _types.Values;
+            return _types.Select(t => t.Value);
         }
 
         public IGraphType this[string typeName]
@@ -74,7 +75,7 @@ namespace GraphQL.Types
             }
             set
             {
-                _types[typeName.TrimGraphQLTypes()] = value;
+                _types.AddOrUpdate(typeName.TrimGraphQLTypes(), value, (n, t) => value);
             }
         }
 
@@ -90,7 +91,7 @@ namespace GraphQL.Types
         public IEnumerable<IGraphType> FindImplemenationsOf(Type type)
         {
             return _types
-                .Values
+                .Select(t => t.Value)
                 .Where(t => t is IImplementInterfaces && t.As<IImplementInterfaces>().Interfaces.Any(i => i == type))
                 .Select(x => x)
                 .ToList();
@@ -104,7 +105,7 @@ namespace GraphQL.Types
                 (name, type, _) =>
                 {
                     var trimmed = name.TrimGraphQLTypes();
-                    _types[trimmed] = type;
+                    _types.AddOrUpdate(trimmed, type, (n, t) => type);
                     _?.AddType(trimmed, type, null);
                 });
 
@@ -132,7 +133,7 @@ namespace GraphQL.Types
             }
 
             var name = type.CollectTypes(context).TrimGraphQLTypes();
-            _types[name] = type;
+            _types.AddOrUpdate(name, type, (n, t) => type);
 
             if (type is IComplexGraphType)
             {
